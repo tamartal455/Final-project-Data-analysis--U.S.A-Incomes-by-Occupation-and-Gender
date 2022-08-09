@@ -1,0 +1,370 @@
+---
+title: "U.S.A Incomes by Occupation and Gender "
+subtitle: "by Roey Nir and Tamar Tal"
+date: "24.6.2021"
+output: 
+  html_document: default
+  pdf_document: default
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+
+
+<br>
+<br>
+
+#### *introduction*
+In this paper we will analyze the ['Ask A Manager Salary Survey 2021']( https://docs.google.com/spreadsheets/d/1IPS5dBSGtwYVbjsfbaMCYIWnOuRmJcbequohNxCyGVw/edit?resourcekey#gid=1625408792) data set. 
+
+This data set contains information regarding people's income and several different variable as you will see below.     
+We would like to examine the effects of different variables such as occupation, gender and years of experience on one's annual salary in three major fields: Hi-tech, Health care and Higher education.
+
+***
+
+#### *Data import and tidying*
+
+```{r echo=FALSE,message=FALSE,warning=FALSE}
+library(tidyverse)
+library(tidyr)
+library(tidyverse)
+library(tidyr)
+library(datasets)
+library(ggplot2)
+library(readxl)
+library(janitor)
+library(data.table)
+library(stringi)
+library(unglue)
+```
+
+```{r importing_the_data, echo=FALSE,message=FALSE,warning=FALSE }
+data<- read_excel("Ask A Manager Salary Survey 2021.xlsx")
+```
+
+First, we need to adjust the data set - here are the main adjustments we did: 
+
+* We filtered the data so we can work with information regarding the USA and the relevant occupation.  
+* We selected the relevant columns for our hypothesis and questions.  
+* We deleted 'NA' values, unclassified gender and unreasonable salaries. 
+
+```{r cleaning, echo=FALSE,message=FALSE,warning=FALSE }
+us_employ <- data %>%
+  filter(Currency=="USD", Gender =="Man"|Gender=="Woman", `Annual salary`!=0 , `Annual salary`!= 102000000, `Annual salary`!= 1)
+
+us_employ <- us_employ %>%
+  select(`How old are you?`,Industry,`Annual salary`,`Overall years of professional experience`,`Highest level of education completed`,Gender,Race)
+
+us_employ<-us_employ%>% drop_na()
+
+us_employ<-us_employ%>% clean_names()
+
+us_employ<- us_employ%>%
+  filter(industry=="Computing or Tech"|industry=="Health care"|industry=="Education (Higher Education)")
+```
+
+#### *Transformation*
+
+We did a little bit of transformation so it will be easier for us to work with the data and for you to go over it – here are the main changes we did:
+
+* We divided the 'Annual salary' column so that we will work with smaller numbers.    
+* We changed the 'highest level of education completed' values to degrees name that matches the types of degrees in Israel.    
+* We changed the columns names according to the transformations above.
+
+<br>
+
+Here, take a little glimpse…
+
+```{r transformations, echo=FALSE,message=FALSE,warning=FALSE}
+us_employ<- us_employ%>%
+  mutate(annual_salary=annual_salary/1000)
+
+us_employ[us_employ == "Education (Higher Education)"]<-"Higher Education"
+us_employ[us_employ == "Computing or Tech"]<-"Hi_tech"
+
+us_employ$highest_level_of_education_completed[us_employ$highest_level_of_education_completed %like% "llege"] <- "Bachelor Degree"
+us_employ$highest_level_of_education_completed[us_employ$highest_level_of_education_completed %like% "Mas"] <- "Master's Degree"
+us_employ$highest_level_of_education_completed[us_employ$highest_level_of_education_completed %like% "Ph"|us_employ$highest_level_of_education_completed %like% "rofessio"] <- "Doctoral Degree"
+us_employ$highest_level_of_education_completed[us_employ$highest_level_of_education_completed %like% "High"] <- "High School Graduate"
+
+glimpse(us_employ)
+```
+
+***
+#### *Visualizations & Modeling*
+
+The next plots will show the difference between man's and woman's average annual salary in each field:
+
+<br>
+<br>
+
+```{r first_plots, echo=FALSE, message=FALSE,warning=FALSE,out.width = "50%",fig.show='hold'}
+
+plot1<-us_employ%>%
+  group_by(industry,gender)%>%
+  summarise(average_salary=mean(annual_salary))
+
+ggplot(aes(industry, average_salary,fill=gender),data=plot1)+
+  geom_col(position = 'dodge')+
+  scale_fill_manual(values = c("#7cb6fd","#fdc27c"))+
+  labs(title = "Average Annual Salary",y="Average salary (in thousands)",x="Field")+
+  geom_text(aes(label=round(average_salary,1)),color="white",vjust=1.5,
+            position = position_dodge(0.9))+
+  theme(panel.background = element_rect(fill = "white"), legend.position = c("0.90","0.92"))
+
+
+
+
+m<- us_employ %>%
+  filter(gender=="Man")%>% select(annual_salary)
+m_mean<- mean(m$annual_salary, na.rm = TRUE)
+
+woman<- us_employ%>%
+  filter(gender=="Woman")%>% count()
+
+over<- us_employ%>%
+  filter(gender=="Woman",annual_salary>=m_mean)%>% count()/4913 *100
+less<- us_employ%>%
+  filter(gender=="Woman",annual_salary<m_mean)%>% count()/4913 *100
+
+
+df<- data.frame(group=c("Earn more than an average man's salary","Earn less than an average man's salary"),value=c(15.26562,84.73438))
+
+
+df%>%
+  ggplot(aes(x="",y=value,fill=group))+
+  geom_bar(width = 1,stat="identity",color="white")+
+  coord_polar("y",start=0)+
+  geom_text(aes(label= paste0(round(value),"%")),position = position_stack(vjust = 0.5) ,color="black")+
+  scale_fill_manual(values = c("#feb956","#fee2b8"))+
+  labs(x= NULL, y=NULL, fill=NULL, title = "Women's income compared to men's average income")+
+  theme_classic()+
+  theme(axis.line = element_blank(),
+        axis.text = element_blank(),
+        axis.ticks = element_blank(),
+        plot.title = element_text(hjust = 0.5),
+        legend.position = c("0.99","0.92"))
+
+
+```
+
+```{r pai chart ,echo=FALSE,message=FALSE,warning=FALSE,out.width = "50%", out.extra='style="float:right;padding:10px"'}
+
+plot2 <- us_employ %>%
+  select(industry,gender,annual_salary)
+
+plot2%>%
+  ggplot(aes(x=gender,y=annual_salary, color=gender))+
+  geom_boxplot(alpha=0.3,outlier.shape=NA, width=1,color=c("#7cb6fd","#fdc27c","#7cb6fd","#fdc27c","#7cb6fd","#fdc27c"),
+               fill=c("#7cb6fd","#fdc27c","#7cb6fd","#fdc27c","#7cb6fd","#fdc27c"))+
+  facet_wrap(~industry)+
+  theme(legend.position = "none",panel.border = element_blank())+
+    ylim(0,200)+
+  labs(x= "Gender",
+       y="Annual salary (in thousands)",
+       title="Annual salary median")+
+  theme_light()
+```
+
+<br>
+
+
+As we can see in these charts, in every field, woman's income is much lower.  
+We can also see the low percentage of woman whose salary is equal or higher than the average salary of man.
+
+<br>
+<br>
+<br>
+<br>
+<br>
+<br>
+<br>
+<br>
+<br>
+<br>
+
+***
+
+##### *First model*
+Clearly gender has an effect on one's income.
+Now we would like to use unpaired two samples t-test to show our hypothesis with a significance level of 0.05.
+
+*Our hypothesis:*  
+\(H_0\)= there is no income difference between genders.  
+\(H_1\)= man's income is higher than woman's income.
+
+The samples are unpaired, so we first need to use Levene`s test to check if the variance of both samples are equal.
+
+Levene`s test:
+```{r t-test,echo=FALSE,message=FALSE,warning=FALSE}
+t_test_data<-us_employ%>%select(gender,annual_salary)%>%drop_na()
+```
+
+```{r f-test,echo=FALSE,message=FALSE,warning=FALSE}
+var.test(t_test_data$annual_salary~ t_test_data$gender, alternative = "two.sided")
+```
+
+As we can see, the p-value equals to 2.2e-16 and smaller than 0.05, therefore, we **can reject** the \(H_0\) assumption, which means the variances are different.
+
+Let`s move on to the one tailed t-test:
+```{r one-tailed-t-test,echo=FALSE,message=FALSE,warning=FALSE}
+t.test(t_test_data$annual_salary ~ t_test_data$gender, var.equal = F, alternative = "greater")
+```
+The p-value equals to 2.2e-16 and smaller than 0.05, therefore, we **can reject** the \(H_0\) assumption, which means that men income is higher than women income. 
+
+***
+
+#### *More visualizations...*
+
+The next question we want to discuss, is if there is a linear connection between one`s total years of experience and his annual income.  
+
+
+```{r import_reg_lin,echo=FALSE,message=FALSE,warning=FALSE}
+lin_reg <- us_employ %>% select(industry, annual_salary, overall_years_of_professional_experience)%>% group_by(industry) %>% slice(501:550)
+lin_reg$overall_years_of_professional_experience <- gsub('[-]', ':', gsub('[a-zA-Z ]', '', lin_reg$overall_years_of_professional_experience))
+
+lin_reg$overall_years_of_professional_experience[lin_reg$overall_years_of_professional_experience=="1"] <- 0
+lin_reg$overall_years_of_professional_experience[lin_reg$overall_years_of_professional_experience=="2:4"] <- 3
+lin_reg$overall_years_of_professional_experience[lin_reg$overall_years_of_professional_experience=="5:7"] <- 6
+lin_reg$overall_years_of_professional_experience[lin_reg$overall_years_of_professional_experience=="8:10"] <- 9
+lin_reg$overall_years_of_professional_experience[lin_reg$overall_years_of_professional_experience=="11:20"] <- 15
+lin_reg$overall_years_of_professional_experience[lin_reg$overall_years_of_professional_experience=="21:30"] <- 25
+lin_reg$overall_years_of_professional_experience[lin_reg$overall_years_of_professional_experience=="31:40"] <- 35
+lin_reg$overall_years_of_professional_experience[lin_reg$overall_years_of_professional_experience=="41"] <- 45
+
+
+lin_reg$overall_years_of_professional_experience <- as.numeric(lin_reg$overall_years_of_professional_experience)
+```
+
+
+```{r second_plot,echo=FALSE,message=FALSE,warning=FALSE,out.width = "65%", out.extra='style="float:right;padding:10px"'}
+lin_reg %>% ggplot(aes(x = overall_years_of_professional_experience, y = annual_salary, color=annual_salary)) +
+  geom_point()+
+  scale_colour_gradient(low ="#0675fb",high="#f42a86" )+
+  facet_wrap(~industry)+
+  scale_x_continuous(breaks = seq(5,50,by=10))+
+  scale_y_continuous(breaks = seq(0,350,by=50))+
+  labs(x= "Years of experience",
+       y="Annual salary (in thousands)",
+       title="Annual salary distribution depending on years of experience")+
+    theme(legend.title = element_blank())
+
+```
+<br>
+<br>
+
+For this part, we created a new variable with the necessary columns and changed the 'overall years of professional experience' column to the middle value of the given range.     
+Next we used the function 'sample_n' to sample 50 random rows from each industry, so that way we can work with a database big enough but not too big.
+
+<br>
+<br>
+
+At first, we thought it would be easy to see a correlation between years of experience and salary but while looking at the plot, we see that this is not the case; there are plenty of people with many years of experience and lower salaries.
+
+We will now try to test this with linear regression model.
+
+<br>
+<br>
+
+***
+
+##### *second model*
+We are using linear regression model with significance level of 0.05.
+Of course the dependent variable $Y$ is the annual salary and the independent variable $X$ is the number of years of experience.
+
+
+*Our hypothesis:*  
+\(H_0\)= there in no linear connection between $X$ and $Y$.  
+\(H_1\)= The larger the $X$, the larger the $Y$.
+
+Another way to write the hypothesis is:  
+\(H_0\): $\beta_1$=0  
+\(H_1\): $\beta_1$>0
+
+
+We chose to examine each field individually because the salary distribution between the fields is different:
+
+1. Health care:
+```{r reg_health_care,echo=FALSE,message=FALSE,warning=FALSE}
+health <- lin_reg %>% filter(industry == "Health care")
+lm2 <- lm(annual_salary ~ overall_years_of_professional_experience, data = health)
+summary(lm2)
+
+```
+<br>
+
+As we can see, the p-value equals to 0.5637 and bigger than 0.05, therefore, we **cannot reject** the \(H_0\) assumption.  
+The conclusion is that there is no linear connection between years of experience and annual salary in Healthcare field.
+
+***
+
+2. Hi-tech:
+```{r reg_hi_tech,echo=FALSE,message=FALSE,warning=FALSE}
+tech <- lin_reg %>% filter(industry == "Hi_tech")
+lm1 <- lm(annual_salary ~ overall_years_of_professional_experience, data = tech)
+summary(lm1)
+
+```
+<br>
+
+Here the p-value equals to 0.02637 and smaller than 0.05, therefore, we **can reject** the \(H_0\) assumption.  
+In contrast to the last field there is a positive linear connection between years of experience and annual salary in Hi-tech field.    
+
+***
+
+3. Higher education:
+```{r reg_education,echo=FALSE,message=FALSE,warning=FALSE}
+education <- lin_reg %>% filter(industry == "Higher Education")
+lm3 <- lm(annual_salary ~ overall_years_of_professional_experience, data =education )
+summary(lm3)
+```
+<br>
+
+Again, there is a positive linear connection between the number of years of experience and the annual salary.    
+We can see that the p- value equals to 0.00007 and smaller than 0.05.
+
+***
+```{r lin_reg_plot,echo=FALSE,message=FALSE,warning=FALSE,out.width = "65%", out.extra='style="float:right;padding:10px"'}
+ggplot(lin_reg) +
+  geom_point(aes(x = overall_years_of_professional_experience, y = annual_salary,color=annual_salary)) + 
+  geom_smooth(method=lm, aes(x = overall_years_of_professional_experience, y = annual_salary),colour="#55595f",size=0.8) + 
+  facet_wrap(~industry)+
+  scale_colour_gradient(low ="#0675fb",high="#f42a86" )+
+  scale_x_continuous(breaks = seq(5,50,by=10))+
+  scale_y_continuous(breaks = seq(0,350,by=50))+
+  labs(x= "Years of experience",
+       y="Annual salary (in thousands)",
+       title="Linear regression of annual salary depending on years of experience")+
+  theme(legend.title = element_blank())
+```
+<br>
+
+Let's look at the last field - Hi-tech...  
+We rejected the \(H_0\) assumption and determined that there is a linear connection.  
+However, how strong is that connection? For that, we can look at the R-squared value which is the indicator for the goodness of the fit between our two variables. In this case, R-squared is low so it can be said that our model does not explain well the relationship between the variables.  
+Maybe next time we would prefer to do other tests or use a larger sample.
+
+<br>
+<br>
+<br>
+<br>
+<br>
+<br>
+<br>
+<br>
+
+***
+
+ 
+#### *Summary*
+
+We examined a couple of question regarding income, gender and occupation.  
+We saw the wage gap between genders through plots and a t-test and we got an general idea about the meaning of experience in the market using regression analysis.  
+In addition, this project gave us a chance to practice different methods in R programming and also some experience that will help us in the future.   
+
+Thank you!
+
+<br>
+<br>
